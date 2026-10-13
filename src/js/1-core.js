@@ -12,14 +12,15 @@ const BASE={
 };
 const SK=['logs','custom','name','unit','goal','theme','prof','body','split','setup','rt'];
 const LB=2.20462;
-let S={logs:[],custom:[],name:'',unit:'lb',goal:4,theme:'auto',prof:{},body:[],split:null,setup:0,skip:0,rt:{auto:1,snd:1,def:90},tok:'',user:'',updated:0,ss:'ok',sel:'Chest Press',w:100,r:10,m:'e1',rg:90,cx:'',fc:0,fw:8,ai:{}};
+let S={logs:[],custom:[],name:'',unit:'lb',goal:4,theme:'auto',prof:{},body:[],split:null,setup:0,skip:0,rt:{auto:1,snd:1,def:90},tok:'',user:'',updated:0,ss:'ok',sel:'Chest Press',w:100,r:10,m:'e1',rg:90,cx:'',fc:0,ct:'p',fw:8,ai:{},chat:[]};
 try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
 (function fix(){const o=x=>x&&typeof x=='object'&&!Array.isArray(x);
  if(!Array.isArray(S.logs))S.logs=[];if(!Array.isArray(S.custom))S.custom=[];if(!Array.isArray(S.body))S.body=[];
  if(!o(S.prof))S.prof={};if(!o(S.ai))S.ai={};if(!o(S.split)||!Array.isArray(S.split.days))S.split=null;
+ if(!Array.isArray(S.chat))S.chat=[];S.chat=S.chat.filter(m=>m&&!m.err&&typeof m.t=='string').slice(-40);S.ct=S.ct=='f'?'f':'p';
  if(!o(S.rt))S.rt={};S.rt={auto:S.rt.auto===0?0:1,snd:S.rt.snd===0?0:1,def:Math.min(300,Math.max(30,Math.round(+S.rt.def||90)))};S.setup=S.setup?1:0;
  S.goal=Math.min(7,Math.max(1,+S.goal||4));if(S.unit!='kg')S.unit='lb'})();
-const T={tab:0,busy:{},tried:{},err:{},chat:[],chatBusy:0,sheet:'',lib:{q:'',g:'All'},sp:{text:'',stage:'paste',res:null,busy:0,msg:''},fc:{},aist:''};
+const T={tab:0,busy:{},tried:{},err:{},chat:S.chat,chatBusy:0,sheet:'',lib:{q:'',g:'All'},sp:{text:'',stage:'paste',res:null,busy:0,msg:''},fc:{},aist:''};
 let fp='',pt=0,_ix=null,_lm=null;
 
 /* ---------- helpers ---------- */
@@ -41,6 +42,10 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');cl
 const P=()=>S.prof;
 const dispW=kg=>S.unit=='kg'?kg:kg*LB, toKg=v=>S.unit=='kg'?v:v/LB;
 const inches=cm=>Math.round(cm/2.54);
+/* Lift weights are stored in the unit shown, so switching converts every stored weight (4 decimals, so toggling back is lossless). */
+const cvt=(w,from,to)=>{if(from==to)return w;const v=+(w*(to=='kg'?1/LB:LB)).toFixed(4),r=Math.round(v*100)/100;return Math.abs(r-v)<.0011?r:v};
+function setUnit(u){if(u!='kg'&&u!='lb'||u==S.unit)return;const from=S.unit;S.logs.forEach(l=>{l.w=cvt(l.w,from,u)});
+ S.w=u=='kg'?Math.round(S.w/LB*2)/2:Math.round(S.w*LB);S.unit=u;S.ai={};T.tried={};T.fc={};save()}
 function profAI(){const p=P(),o={};['age','sex','h','w','bf','goal','exp'].forEach(k=>{if(p[k]!==undefined&&p[k]!==''&&p[k]!==null)o[k]=p[k]});return o}
 
 /* ---------- exercise library ---------- */
@@ -113,12 +118,13 @@ function localReview(){const W=weeks(4),cur=W[0],out=[],avgS=avg(W.map(w=>w.sess
  if(p.w&&out.length<4){const lo=Math.round(1.6*p.w),hi=Math.round(2.2*p.w);out.push({kind:'tip',text:'Aim for roughly '+Math.round(dispW(lo))+' to '+Math.round(dispW(hi))+(S.unit=='kg'?' g':' g')+' of protein a day at your weight.'})}
  const sc=Math.round(clamp(40+Math.min(1,avgS/S.goal)*35+(st.length?0:15)+(tot>=12&&G.every(g=>(by14[g]||0)>0)?10:0),0,100));
  return{headline:sc>=80?'Strong and consistent':sc>=60?'Solid, a few gaps':'Room to tighten up',score:sc,insights:out.slice(0,4),src:'local'}}
+function planFor(x){if(!S.split)return null;let c=0,sets=0,reps='';for(const d of S.split.days){const e=d.ex.find(e=>e.n==x);if(e){c++;sets=e.s;reps=e.r}}return c?{perWeek:f1(c*S.goal/S.split.days.length),sets,reps}:null}
 function localForecast(x,m,wks){const s=ser(x,m);if(!s.length)return null;const cur=s[s.length-1][1],now=sod(Date.now()),pts=s.filter(p=>p[0]>=now-84*DAY),base={new:.012,mid:.006,adv:.003}[P().exp]||.006;let g=null;
  if(pts.length>=3){const xs=pts.map(p=>(p[0]-pts[0][0])/(7*DAY)),ys=pts.map(p=>p[1]),mx=avg(xs),my=avg(ys);let nn=0,dd=0;xs.forEach((v,i)=>{nn+=(v-mx)*(ys[i]-my);dd+=(v-mx)**2});g=dd?nn/dd/my:0}
- const r=g==null?base:clamp(g*.6+base*.4,0,.025),pts2=[],low=[],high=[];let v=cur;
+ const pf=planFor(x),gf={fat:.75,gen:.9}[P().goal]||1,r=(g==null?base:clamp(g*.6+base*.4,0,.025))*(pf?clamp(.75+pf.perWeek*.125,.75,1.15):1)*gf,pts2=[],low=[],high=[];let v=cur;
  for(let i=1;i<=wks;i++){v=v*(1+r*Math.pow(.97,i-1));const sp=(v-cur)*.6+cur*.006*Math.sqrt(i);pts2.push(f1(v));low.push(f1(Math.max(cur*.95,v-sp)));high.push(f1(v+sp))}
  const end=pts2[wks-1],step=S.unit=='kg'?2.5:5,tgt=(Math.floor(cur/step)+1)*step,wi=pts2.findIndex(p=>p>=tgt),ms=wi>=0?[{label:f1(tgt)+' '+S.unit,week:wi+1}]:[];
- return{pts:pts2,low,high,weeks:wks,summary:'At your current pace this lift reaches about '+f1(end)+' '+S.unit+' in '+wks+' weeks ('+(end>=cur?'+':'')+f1((end/cur-1)*100)+'%).',milestones:ms,src:'local'}}
+ return{pts:pts2,low,high,weeks:wks,summary:'At your current pace this lift reaches about '+f1(end)+' '+S.unit+' in '+wks+' weeks ('+(end>=cur?'+':'')+f1((end/cur-1)*100)+'%).',milestones:ms,src:'local',plan:pf}}
 
 /* ---------- split text parser (fallback when AI is unavailable) ---------- */
 const WDN={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};

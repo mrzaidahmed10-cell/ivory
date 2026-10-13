@@ -16,8 +16,8 @@ function setSS(v){S.ss=v;const e=$('#ss');if(e)e.textContent=ssText()}
 function queue(){setSS('pending');clearTimeout(pt);pt=setTimeout(push,1500)}
 function drop(quiet){S.tok='';S.user='';save();if(!quiet)toast('Signed out');if(!S.skip)obStart();else if(T.tab==3)render()}
 function apply(d,u){SK.forEach(k=>{if(d[k]!==undefined&&(S[k]==null||typeof d[k]==typeof S[k]))S[k]=d[k]});if(!Array.isArray(S.logs))S.logs=[];S.updated=u;fp=JSON.stringify(sd());save();theme();render()}
-function mergeIn(d){const ids=new Set(S.logs.map(l=>l.id));(d.logs||[]).forEach(l=>{if(l&&!ids.has(l.id))S.logs.push(l)});const cn=new Set(S.custom.map(c=>c.n));(d.custom||[]).forEach(c=>{if(c&&!cn.has(c.n))S.custom.push(c)});
- if(d.setup)S.setup=1;if(d.rt&&typeof d.rt=='object'&&!S.setup)S.rt={...S.rt,...d.rt};S.name=S.name||d.name||'';if(d.unit)S.unit=d.unit;if(d.goal)S.goal=d.goal;S.prof={...(d.prof||{}),...S.prof};const bt=new Set(S.body.map(b=>b.t));(d.body||[]).forEach(b=>{if(b&&!bt.has(b.t))S.body.push(b)});S.body.sort((a,b)=>a.t-b.t);if(!S.split&&d.split)S.split=d.split}
+function mergeIn(d){const ids=new Set(S.logs.map(l=>l.id)),du=d.unit=='kg'?'kg':'lb';(d.logs||[]).forEach(l=>{if(l&&!ids.has(l.id))S.logs.push(du==S.unit?l:{...l,w:cvt(l.w,du,S.unit)})});const cn=new Set(S.custom.map(c=>c.n));(d.custom||[]).forEach(c=>{if(c&&!cn.has(c.n))S.custom.push(c)});
+ if(d.setup)S.setup=1;if(d.rt&&typeof d.rt=='object'&&!S.setup)S.rt={...S.rt,...d.rt};S.name=S.name||d.name||'';if(d.goal)S.goal=d.goal;S.prof={...(d.prof||{}),...S.prof};const bt=new Set(S.body.map(b=>b.t));(d.body||[]).forEach(b=>{if(b&&!bt.has(b.t))S.body.push(b)});S.body.sort((a,b)=>a.t-b.t);if(!S.split&&d.split)S.split=d.split}
 async function push(){if(!S.tok)return;if(!navigator.onLine)return setSS('offline');setSS('syncing');try{const r=await api('sync',{action:'push',token:S.tok,data:sd(),updated:S.updated});if(r.conflict)apply(r.data,r.updated);else setSS('ok')}catch(e){e.status==401?drop(true):setSS('offline')}}
 async function pullLWW(){if(!S.tok||!navigator.onLine)return;try{const r=await api('sync',{action:'pull',token:S.tok});if(r.data&&r.updated>(S.updated||0))apply(r.data,r.updated);else if(!r.data||r.updated<(S.updated||0))await push();else setSS('ok')}catch(e){e.status==401?drop(true):setSS('offline')}}
 async function doAuth(a){const user=($('#au').value||'').trim().toLowerCase(),pass=$('#ap').value||'';
@@ -72,16 +72,15 @@ async function readSplit(text){text=String(text).trim();if(!text)return toast('P
 
 /* forecast */
 const fcKey=(x,m,w)=>[x,m,w,S.logs.length].join('|');
-function fcInput(x,m,w){const s=ser(x,m),now=sod(Date.now());let pl=null;
- if(S.split){let c=0,sets=0,reps='';for(const d of S.split.days){const e=d.ex.find(e=>e.n==x);if(e){c++;sets=e.s;reps=e.r}}if(c)pl={perWeek:f1(c*S.goal/S.split.days.length),sets,reps}}
+function fcInput(x,m,w){const s=ser(x,m),now=sod(Date.now());const pl=planFor(x);
  return{unit:S.unit,p:profAI(),ex:x,g:grp(x),metric:m=='w'?'weight':'e1rm',cur:s[s.length-1][1],hist:s.slice(-24).map(p=>[dayNo(p[0]),p[1]]),weeks:w,plan:pl,freq:f1(sess(x).filter(c=>c.d>=now-28*DAY).length/4)}}
 function cleanFc(j,w,cur){if(!j||!Array.isArray(j.pts)||j.pts.length<w)return null;const num=a=>a.slice(0,w).map(Number),pts=num(j.pts);if(pts.some(v=>!isFinite(v)))return null;
  const p=pts.map(v=>f1(clamp(v,cur*.9,cur*1.6)));let low=Array.isArray(j.low)&&j.low.length>=w?num(j.low):null,high=Array.isArray(j.high)&&j.high.length>=w?num(j.high):null;
  if(!low||low.some(v=>!isFinite(v)))low=p.map((v,i)=>v-(v-cur)*.5-cur*.004*(i+1));if(!high||high.some(v=>!isFinite(v)))high=p.map((v,i)=>v+(v-cur)*.5+cur*.004*(i+1));
  const ms=(Array.isArray(j.milestones)?j.milestones:[]).map(m=>({label:cap(m&&m.label||'').slice(0,30),week:Math.round(+(m&&m.week))})).filter(m=>m.label&&m.week>=1&&m.week<=w).slice(0,2);
  return{pts:p,low:low.map((v,i)=>f1(Math.min(v,p[i]))),high:high.map((v,i)=>f1(Math.max(v,p[i]))),weeks:w,summary:cap(j.summary||'').slice(0,170),milestones:ms,src:'ai'}}
-function fcGet(){const x=S.cx,m=S.m,w=S.fw;if(!x||x=='__bw'||sess(x).length<2)return null;const c=S.ai.fc&&S.ai.fc[fcKey(x,m,w)];return c&&c.d==sod(Date.now())?c.r:localForecast(x,m,w)}
-async function aiForecast(force){const x=S.cx,m=S.m,w=S.fw;if(!S.fc||!S.tok||!x||x=='__bw'||sess(x).length<2)return;const key=fcKey(x,m,w),c=S.ai.fc&&S.ai.fc[key];
+function fcGet(){const x=S.cx,m=S.m,w=S.fw;if(!x||x=='__bw'||sess(x).length<1)return null;const c=S.ai.fc&&S.ai.fc[fcKey(x,m,w)];return c&&c.d==sod(Date.now())?c.r:localForecast(x,m,w)}
+async function aiForecast(force){const x=S.cx,m=S.m,w=S.fw;if(S.ct!='f'||!S.tok||!x||x=='__bw'||sess(x).length<1)return;const key=fcKey(x,m,w),c=S.ai.fc&&S.ai.fc[key];
  if(c&&c.d==sod(Date.now())&&!force)return;if(T.busy.fc||(T.tried['fc'+key]&&!force))return;T.tried['fc'+key]=1;T.busy.fc=1;T.err.fc='';refresh(2);
  try{const inp=fcInput(x,m,w),r=cleanFc(await ai('forecast',inp),w,inp.cur);if(!r)throw{code:'upstream',detail:'The coach returned an unusable forecast'};
   S.ai.fc=S.ai.fc||{};S.ai.fc[key]={d:sod(Date.now()),r};const ks=Object.keys(S.ai.fc);if(ks.length>14)delete S.ai.fc[ks[0]];save()}
@@ -89,9 +88,10 @@ async function aiForecast(force){const x=S.cx,m=S.m,w=S.fw;if(!S.fc||!S.tok||!x|
  T.busy.fc=0;refresh(2)}
 
 /* chat */
-function ctx(){return{unit:S.unit,p:profAI(),goalDays:S.goal,split:S.split?S.split.days.map(d=>({name:d.name,ex:d.ex.map(e=>e.n+' '+e.s+'x'+e.r)})):null,weeks:weeks(4).map(w=>({sessions:w.sessions,sets:w.sets,volume:w.volume,byGroup:w.byGroup})),lifts:recent(28).slice(0,14).map(x=>({n:x,g:grp(x),h:hist(x,4)})),prs:records().slice(0,5).map(r=>({ex:r.ex,e1rm:Math.round(r.e),daysAgo:dayNo(r.d)})),stalls:stalls().slice(0,4),today:todayLogs().map(l=>[l.ex,l.w,l.r])}}
-async function chatSend(q){q=String(q).replace(/\s+/g,' ').trim().slice(0,500);if(!q||T.chatBusy)return;T.chat.push({r:'u',t:q});T.chatBusy=1;renderChat();
- try{const j=await ai('chat',{q,hist:T.chat.filter(m=>!m.err).slice(-9,-1).map(m=>({r:m.r,t:m.t.slice(0,600)})),ctx:ctx()}),rep=String(j&&j.reply||'').trim().slice(0,1500);if(!rep)throw{code:'upstream',detail:'Empty answer'};T.chat.push({r:'c',t:rep})}
+function ctx(){return{focus:T.focus||null,unit:S.unit,p:profAI(),goalDays:S.goal,split:S.split?S.split.days.map(d=>({name:d.name,ex:d.ex.map(e=>e.n+' '+e.s+'x'+e.r)})):null,weeks:weeks(4).map(w=>({sessions:w.sessions,sets:w.sets,volume:w.volume,byGroup:w.byGroup})),lifts:recent(28).slice(0,14).map(x=>({n:x,g:grp(x),h:hist(x,4)})),prs:records().slice(0,5).map(r=>({ex:r.ex,e1rm:Math.round(r.e),daysAgo:dayNo(r.d)})),stalls:stalls().slice(0,4),today:todayLogs().map(l=>[l.ex,l.w,l.r])}}
+async function chatSend(q){q=String(q).replace(/\s+/g,' ').trim().slice(0,500);if(!q||T.chatBusy)return;if(!S.tok)return toast('Sign in to chat with the coach');T.chat.push({r:'u',t:q});T.chatBusy=1;save();renderChat();
+ try{const j=await ai('chat',{q,hist:T.chat.filter(m=>!m.err).slice(-9,-1).map(m=>({r:m.r,t:m.t.slice(0,600)})),ctx:ctx()}),rep=String(j&&j.reply||'').trim().slice(0,1600);if(!rep)throw{code:'upstream',detail:'Empty answer'};
+  const f=(Array.isArray(j.follow)?j.follow:[]).map(x=>cap(x).slice(0,48)).filter(Boolean).slice(0,3);T.chat.push({r:'c',t:rep,f});if(T.chat.length>40)T.chat.splice(0,T.chat.length-40);save()}
  catch(e){T.chat.push({r:'c',t:errText(e),err:1})}
  T.chatBusy=0;renderChat()}
 

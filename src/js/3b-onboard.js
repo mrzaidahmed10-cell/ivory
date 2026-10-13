@@ -5,7 +5,7 @@ const needAuth=()=>!S.tok&&!S.skip;
 const needSetup=()=>!S.setup&&!S.logs.length&&!(S.name||P().age||P().w);
 function obStart(){const st=needAuth()?'auth':needSetup()?0:null;if(st===null)return obEnd();
  T.ob.on=1;T.ob.step=st;document.body.classList.add('onb');V.innerHTML='';closeSheet();obRender();OB.scrollTop=0}
-function obEnd(){T.ob.on=0;document.body.classList.remove('onb');OB.innerHTML='';measure();place(T.tab);hot(T.tab);render()}
+function obEnd(){T.ob.on=0;document.body.classList.remove('onb');OB.innerHTML='';measure();placeNow(T.tab);hot(T.tab);render()}
 function afterAuth(){toast(T.ob.mode=='signup'?'Account created':'Signed in');if(needSetup()){T.ob.step=0;obRender();OB.scrollTop=0}else obEnd()}
 const obErr=m=>{const e=$('#oerr');if(e)e.textContent=m||''};
 function obMode(m){const u=$('#au'),p=$('#ap'),a=u?u.value:'',b=p?p.value:'';T.ob.mode=m;obRender();if($('#au')){$('#au').value=a;$('#ap').value=b}}

@@ -7,27 +7,44 @@ const seg=(a,o,c)=>`<div class="seg">${o.map(([v,t])=>`<button class="${v==c?'on
 const emptyCard=()=>`<div class="card p"><b style="font-size:17px">No sets logged yet</b><p class="sub" style="margin:4px 0 14px">Log your first set to see progress here.</p><button class="btn" data-a="go1">Log first set</button><div style="height:8px"></div><button class="btn g" data-a="sample">Load sample data</button></div>`;
 function theme(){const d=document.documentElement;S.theme=='auto'?d.removeAttribute('data-theme'):d.dataset.theme=S.theme;const dark=S.theme=='dark'||(S.theme=='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);document.querySelector('meta[name=theme-color]').content=dark?'#0a0c11':'#eeeae0'}
 
-/* ---------- liquid glass nav: drag the lens, pages switch only on release ---------- */
-const nav=$('.nav'),lens=$('.ind'),NB=[...document.querySelectorAll('.nb button')];
-let cell=0,dg=null;
+/* ---------- liquid glass nav: spring-driven lens (stretch, squash, lean, jelly settle); pages switch only on release ---------- */
+const nav=$('.nav'),lens=$('.ind'),gb=$('.gb'),NB=[...document.querySelectorAll('.nb button')];
+let cell=0,dg=null,hi=0;
+const L={x:0,v:0,tx:0,p:0,pv:0,tp:0,raf:0,t:0,drag:0};
+const RM=matchMedia('(prefers-reduced-motion:reduce)');
+function lpaint(){const sp=Math.abs(L.v),st=Math.min(sp/2600,.26),d=L.v<0?-1:1;
+ lens.style.translate=L.x.toFixed(2)+'px 0';
+ lens.style.scale=(1+.15*L.p+st).toFixed(3)+' '+(1+.19*L.p-st*.38).toFixed(3);
+ lens.style.transformOrigin=(50-d*Math.min(sp/50,22)).toFixed(1)+'% 50%';
+ lens.style.transform='skewX('+(-Math.max(-11,Math.min(11,L.v/140))).toFixed(2)+'deg)';
+ gb.style.scale=(1+.012*L.p+st*.06).toFixed(4)+' '+(1+.016*L.p-st*.05).toFixed(4)}
+function lstep(t){const dt=Math.min(.033,Math.max(.001,(t-(L.t||t))/1000));L.t=t;
+ const k=L.drag?620:250,z=L.drag?.8:.6,c=2*z*Math.sqrt(k);
+ L.v+=((L.tx-L.x)*k-L.v*c)*dt;L.x+=L.v*dt;
+ L.pv+=((L.tp-L.p)*320-L.pv*2*.46*Math.sqrt(320))*dt;L.p+=L.pv*dt;lpaint();
+ if(Math.abs(L.tx-L.x)<.15&&Math.abs(L.v)<3&&Math.abs(L.tp-L.p)<.004&&Math.abs(L.pv)<.05){L.x=L.tx;L.v=0;L.p=L.tp;L.pv=0;lpaint();L.raf=0;L.t=0;return}
+ L.raf=requestAnimationFrame(lstep)}
+const kick=()=>{if(RM.matches){L.x=L.tx;L.p=L.tp;L.v=L.pv=0;lpaint();return}if(!L.raf){L.t=0;L.raf=requestAnimationFrame(lstep)}};
 const measure=()=>{cell=(nav.clientWidth-8)/4};
-const place=(i)=>lens.style.setProperty('--x',i*cell+'px');
-const hot=i=>NB.forEach((b,j)=>b.classList.toggle('on',j==i));
+const place=i=>{L.tx=i*cell;kick()};
+const placeNow=i=>{L.tx=L.x=i*cell;L.v=0;lpaint()};
+const hot=i=>{NB.forEach((b,j)=>b.classList.toggle('on',j==i))};
 function choose(i){place(i);hot(i);if(i!==T.tab)sel(i);else buzz()}
-nav.addEventListener('pointerdown',e=>{if(e.button>0)return;measure();dg={id:e.pointerId,sx:e.clientX,r:nav.getBoundingClientRect(),moved:0,off:0,x:T.tab*cell,vx:0,lx:e.clientX,lt:performance.now()}});
+const tabAt=x=>clamp(Math.round(clamp(x,0,3*cell)/cell),0,3);
+nav.addEventListener('pointerdown',e=>{if(e.button>0)return;measure();dg={id:e.pointerId,sx:e.clientX,r:nav.getBoundingClientRect(),moved:0,off:0,x:L.x,vx:0,lx:e.clientX,lt:performance.now()};hi=T.tab;nav.classList.add('drag');L.tp=1;kick()});
 nav.addEventListener('pointermove',e=>{if(!dg||e.pointerId!==dg.id)return;
- if(!dg.moved){if(Math.abs(e.clientX-dg.sx)<5)return;dg.moved=1;try{nav.setPointerCapture(e.pointerId)}catch(_){}
-  const f0=dg.sx-dg.r.left-4,c=T.tab*cell+cell/2;dg.off=Math.abs(f0-c)<=cell/2?f0-c:0;nav.classList.add('drag');buzz()}
- const max=3*cell;let x=e.clientX-dg.r.left-4-dg.off-cell/2;if(x<0)x=-Math.min(-x*.25,16);else if(x>max)x=max+Math.min((x-max)*.25,16);
- dg.x=x;lens.style.setProperty('--x',x+'px');const t=performance.now();dg.vx=(e.clientX-dg.lx)/Math.max(1,t-dg.lt);dg.lx=e.clientX;dg.lt=t;
- hot(clamp(Math.round(clamp(x,0,max)/cell),0,3))});
-function endDrag(e,cancel){if(!dg)return;const d=dg;dg=null;nav.classList.remove('drag');try{nav.releasePointerCapture(d.id)}catch(_){}
+ if(!dg.moved){if(Math.abs(e.clientX-dg.sx)<4)return;dg.moved=1;try{nav.setPointerCapture(e.pointerId)}catch(_){}
+  const f0=dg.sx-dg.r.left-4,c=L.x+cell/2;dg.off=Math.abs(f0-c)<=cell/2?f0-c:0;L.drag=1;buzz()}
+ const max=3*cell;let x=e.clientX-dg.r.left-4-dg.off-cell/2;if(x<0)x=-Math.min(-x*.3,20);else if(x>max)x=max+Math.min((x-max)*.3,20);
+ dg.x=x;L.tx=x;kick();const t=performance.now();dg.vx=(e.clientX-dg.lx)/Math.max(1,t-dg.lt);dg.lx=e.clientX;dg.lt=t;
+ const h=tabAt(x);if(h!==hi){hi=h;buzz()}hot(h)});
+function endDrag(e,cancel){if(!dg)return;const d=dg;dg=null;L.drag=0;L.tp=0;nav.classList.remove('drag');try{nav.releasePointerCapture(d.id)}catch(_){}
  if(cancel){place(T.tab);hot(T.tab);return}
  if(!d.moved){choose(clamp(Math.floor((e.clientX-d.r.left-4)/cell),0,3));return}
- const v=performance.now()-d.lt>70||Math.abs(d.vx)<.25?0:d.vx;choose(clamp(Math.round(clamp(d.x+v*90,0,3*cell)/cell),0,3))}
+ const v=performance.now()-d.lt>70||Math.abs(d.vx)<.25?0:d.vx;choose(tabAt(d.x+v*90))}
 nav.addEventListener('pointerup',e=>endDrag(e));nav.addEventListener('pointercancel',e=>endDrag(e,1));
 NB.forEach((b,i)=>b.addEventListener('click',e=>{if(e.detail===0)choose(i)}));
-if(window.ResizeObserver)new ResizeObserver(()=>{measure();place(T.tab)}).observe(nav);
+if(window.ResizeObserver)new ResizeObserver(()=>{measure();placeNow(T.tab)}).observe(nav);
 
 function sel(i){const ch=i!==T.tab;if(ch&&T.tab==3)bodyHist();T.tab=i;hot(i);if(ch){V.style.animation='none';V.offsetHeight;V.style.animation=''}render();scrollTo(0,0);if(ch)buzz()}
 function go(i){measure();place(i);sel(i)}
@@ -61,7 +78,7 @@ const restCard=()=>`<div class="card p tm"><div class="tmr"><svg viewBox="0 0 12
 /* ---------- sheets ---------- */
 const shEl=$('#sh');
 const SHEETS={lib:()=>libSheet(),custom:()=>customSheet(),split:()=>splitSheet(),chat:()=>chatSheet(),body:()=>bodySheet()};
-function renderSheet(){shEl.innerHTML='<div class="sp" role="dialog" aria-modal="true" data-stop>'+(SHEETS[T.sheet]||(()=>''))()+'</div>';if(T.sheet=='chat')renderChat()}
+function renderSheet(){shEl.innerHTML='<div class="sp" role="dialog" aria-modal="true" data-stop><div class="grab"></div>'+(SHEETS[T.sheet]||(()=>''))()+'</div>';if(T.sheet=='chat')renderChat()}
 function openSheet(k){const was=shEl.classList.contains('open');T.sheet=k;renderSheet();if(!was){shEl.offsetHeight;shEl.classList.add('open');document.body.classList.add('lock')}}
 function closeSheet(){const w=T.sheet;T.sheet='';shEl.classList.remove('open');document.body.classList.remove('lock');const a=document.activeElement;if(a&&a.blur)a.blur();if(w=='body'){bodyHist();if(T.tab==3&&!T.ob.on)render()}}
 const xBtn='<button data-a="closes" aria-label="Close">✕</button>';
@@ -91,10 +108,18 @@ function bodySheet(){const p=P(),kg=S.unit=='kg',tin=p.h?inches(p.h):0,lean=p.w&
  <div class="row"><span>Body fat</span><div class="ht"><input class="ri n" data-pf="bf" inputmode="decimal" value="${p.bf||''}" placeholder="—">%</div></div>
  <div class="row"><span>Goal</span><select class="rs" data-pf="goal">${sOpt([['','Not set'],['str','Get stronger'],['mus','Build muscle'],['fat','Lose fat'],['gen','General fitness']],p.goal||'')}</select></div>
  <div class="row"><span>Experience</span><select class="rs" data-pf="exp">${sOpt([['','Not set'],['new','Under 1 year'],['mid','1 to 3 years'],['adv','Over 3 years']],p.exp||'')}</select></div></div>`}
-const PROMPTS=['How was my week?','Why am I stalling?','Should I deload?','What should I eat today?'];
-const chatSheet=()=>`<h3>Ask coach${xBtn}</h3><p class="sub">Knows your split, lifts and body data.</p>`+(S.tok?`<div class="chips">${PROMPTS.map(p=>`<button class="chip" data-a="q" data-v="${esc(p)}">${p}</button>`).join('')}</div><div class="msgs" id="cm"></div><div class="ask"><input class="search" id="cq" placeholder="Ask about your training" enterkeyhint="send" autocomplete="off" maxlength="500"><button class="btn" data-a="send" aria-label="Send">↑</button></div>`:`<p style="margin:6px 0 16px">Sign in under Settings to chat with the coach.</p><button class="btn" data-a="acct">Open Settings</button>`);
-function renderChat(){const m=$('#cm');if(!m)return;m.innerHTML=(T.chat.length?T.chat.map(x=>`<div class="msg ${x.r}">${esc(x.t)}</div>`).join(''):'<p class="sub">Ask anything about your training. Try “How was my week?”.</p>')+(T.chatBusy?'<div class="msg c"><div class="shim" style="width:70px"></div></div>':'');m.scrollTop=m.scrollHeight}
-
+const PROMPTS=['How was my week?','Critique my split','Why am I stalling?','Should I deload?','What should I eat today?'];
+const cbar=(ph,chips)=>S.tok?`<div class="cb"><input class="search" data-cq enterkeyhint="send" autocomplete="off" maxlength="500" placeholder="${esc(ph)}"><button class="btn" data-a="cask" aria-label="Ask coach">↑</button></div>${chips?`<div class="chips cbc">${chips.map(c=>`<button class="chip" data-a="cq" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}`:`<div class="row tap" style="min-height:44px" data-a="acct"><span class="sel">Sign in to chat with your coach</span></div>`;
+function pageFocus(){const lastv=x=>{const a=ser(x,S.m);return a.length?a[a.length-1][1]:null};
+ if(T.tab==1){const x=S.sel,it=plan().items.find(i=>i.ex==x);return{screen:'track',ex:x,g:grp(x),hist:hist(x,5),target:it?{sets:it.sets,reps:it.reps,w:it.w,rest:it.rest}:null,todaySets:todayLogs().filter(l=>l.ex==x).map(l=>[l.w,l.r])}}
+ if(T.tab==2){const x=S.cx;if(!x||x=='__bw')return{screen:'charts'};const f=S.ct=='f'?fcGet():null,n=lastv(x);return{screen:S.ct=='f'?'forecast':'charts',ex:x,hist:hist(x,6),forecast:f&&n?{weeks:f.weeks,now:n,end:f.pts[f.weeks-1],low:f.low[f.weeks-1],high:f.high[f.weeks-1],plan:planFor(x)}:null}}
+ return{screen:T.tab==0?'home':'settings',today:T.tab==0?plan().title:undefined}}
+function openChat(q,focus){T.focus=focus||null;openSheet('chat');if(q)chatSend(q);else setTimeout(renderChat,0)}
+const chatSheet=()=>`<h3>Coach<span class="hb">${S.tok&&T.chat.length?'<button class="tag" data-a="clearchat">Clear</button>':''}${xBtn}</span></h3><p class="sub">Knows your split, lifts and body data${T.focus&&T.focus.ex?' · looking at '+esc(T.focus.ex):''}.</p>`+(S.tok?`<div class="msgs" id="cm"></div><div class="ask"><input class="search" id="cq" placeholder="Ask about your training or split" enterkeyhint="send" autocomplete="off" maxlength="500"><button class="btn" data-a="send" aria-label="Send">↑</button></div>`:`<p style="margin:6px 0 16px">Sign in to chat with the coach.</p><button class="btn" data-a="acct">Sign in</button>`);
+function renderChat(){const m=$('#cm');if(!m)return;const lastC=T.chat.length&&T.chat[T.chat.length-1];
+ const fl=lastC&&lastC.r=='c'&&!lastC.err&&lastC.f&&lastC.f.length?lastC.f:null;
+ m.innerHTML=(T.chat.length?T.chat.map(x=>`<div class="msg ${x.r}">${esc(x.t)}</div>`).join(''):`<p class="sub">Ask anything about your training or your split. Try one of these.</p><div class="chips cbc" style="flex-wrap:wrap">${PROMPTS.map(p=>`<button class="chip" data-a="q" data-v="${esc(p)}">${p}</button>`).join('')}</div>`)
+ +(T.chatBusy?'<div class="msg c"><div class="shim" style="width:70px"></div></div>':'')+(fl&&!T.chatBusy?`<div class="chips cbc fl" style="flex-wrap:wrap">${fl.map(p=>`<button class="chip" data-a="q" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`:'');m.scrollTop=m.scrollHeight}
 /* ---------- home ---------- */
 function home(){const h=new Date().getHours(),gr=h<5?'Late night':h<12?'Good morning':h<18?'Good afternoon':'Good evening';
  const head=`<div class="hd"><div><p class="sub">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</p><h1>${gr}${S.name?', '+esc(S.name):''}</h1></div>${LOGO}</div>`;
@@ -109,8 +134,9 @@ function todayCard(){const p=plan(),busy=T.busy.plan,started=todayLogs().length>
 function weekCard(){const W=weeks(1)[0],w0=wkStart(Date.now()),td=sod(Date.now()),ds=[...W.dset],by=W.byGroup,gs=G.filter(g=>by[g]);
  const dots=['M','T','W','T','F','S','S'].map((l,i)=>{const d=sod(w0+i*DAY+DAY/2);return`<div><span>${l}</span><i class="${ds.some(x=>Math.abs(x-d)<DAY/2)?'on':''} ${Math.abs(d-td)<DAY/2?'td':''}"></i></div>`}).join('');
  return`<h2>This week</h2><div class="card"><div class="wk">${dots}</div><div class="kp"><div><b>${W.sessions}/${S.goal}</b><span>sessions</span></div><div><b>${fv(W.volume)}</b><span>${S.unit} lifted</span></div><div><b>${streak()}</b><span>day streak</span></div></div>${gs.length?`<div class="bw"><div class="bal">${gs.map(g=>`<i style="--h:${GH[g]};flex:${by[g]}"></i>`).join('')}</div><div class="lg">${gs.map(g=>`<span style="--h:${GH[g]}">${g} ${by[g]}</span>`).join('')}</div></div>`:''}</div>`}
-function coachCard(){if(S.logs.length<3)return'';const r=review(),busy=T.busy.review;
- return`<h2>Coach<button data-a="chat">Ask a question</button></h2><div class="card p"><div class="eh"><b style="font-size:17px">${esc(r.headline)}</b><span class="score">${r.score}</span></div>${r.insights.map(i=>`<div class="in ${i.kind}"><i></i><p>${esc(i.text)}</p></div>`).join('')}<div class="eh" style="margin-top:4px"><span class="sub">${r.src=='ai'?'AI review · last 4 weeks':busy?'Asking the coach…':S.tok?'Quick review':'Quick review · sign in for AI'}</span>${S.tok?`<button class="tag sg" data-a="review" ${busy?'disabled':''}>${SPK}${busy?'Thinking…':'Refresh'}</button>`:''}</div>${T.err.review&&r.src!='ai'?`<p class="note red">${esc(T.err.review)}</p>`:''}</div>`}
+function coachCard(){const r=S.logs.length>=3?review():null,busy=T.busy.review,lc=[...T.chat].reverse().find(m=>m.r=='c'&&!m.err);
+ const chips=S.logs.length?['How was my week?','Critique my split','What should I train today?']:['Explain my split','How should I start?'];
+ return`<h2>Coach<button data-a="chat">${T.chat.length?'Open chat':'Full chat'}</button></h2><div class="card p">${r?`<div class="eh"><b style="font-size:17px">${esc(r.headline)}</b><span class="score">${r.score}</span></div>${r.insights.map(i=>`<div class="in ${i.kind}"><i></i><p>${esc(i.text)}</p></div>`).join('')}<div class="eh" style="margin:4px 0 12px"><span class="sub">${r.src=='ai'?'AI review · last 4 weeks':busy?'Asking the coach…':S.tok?'Quick review':'Quick review · sign in for AI'}</span>${S.tok?`<button class="tag sg" data-a="review" ${busy?'disabled':''}>${SPK}${busy?'Thinking…':'Refresh'}</button>`:''}</div>${T.err.review&&r.src!='ai'?`<p class="note red" style="margin:0 0 10px">${esc(T.err.review)}</p>`:''}`:''}${lc?`<div class="lastc" data-a="chat"><span class="sub">Last answer</span><p>${esc(lc.t.length>150?lc.t.slice(0,150)+'…':lc.t)}</p></div>`:''}${cbar('Ask your coach anything',chips)}</div>`}
 function recordsCard(){const rs=records().slice(0,8);if(!rs.length)return'';
  return`<h2>Records</h2><div class="prs">${rs.map(r=>{const d=dayNo(r.d);return`<div class="pr" data-a="chart" data-v="${esc(r.ex)}"><small>PR · ${d<1?'today':d+'d ago'}</small><b>${esc(r.ex)}</b><strong>${f1(r.w)} × ${r.r}</strong><span class="sub">+${f1(r.gain*100)}% est. 1RM</span></div>`}).join('')}</div>`}
 /* ---------- track ---------- */
@@ -121,14 +147,14 @@ function track(){const x=S.sel,l=last(x),p=plan(),items=sessItems(),it=p.items.f
  const tgt=it?`Target ${it.w?f1(it.w)+' '+S.unit:'your weight'} × ${it.tr} · ${it.sets} sets · rest ${it.rest}s`:'',why=it?it.note:nextSet(x).why;
  const stp=(k,lab,v,mode)=>`<div><label>${lab}</label><div class="st"><button data-a="${k}-" aria-label="Decrease">−</button><input id="i${k}" type="number" inputmode="${mode}" value="${v}"><button data-a="${k}+" aria-label="Increase">+</button></div></div>`;
  const rail=`<div class="rail" id="rail">${items.map(i=>{const ds=doneSets(i.ex),ok=i.sets&&ds>=i.sets;return`<button class="rx ${i.ex==x?'on':''} ${ok?'ok':''}" data-a="pickx" data-v="${esc(i.ex)}">${ok?CHK:''}<span>${esc(i.ex)}</span>${ds?`<em>${ds}${i.sets?'/'+i.sets:''}</em>`:''}</button>`}).join('')}<button class="rx add" data-a="lib">+ Exercise</button></div>`;
- const act=`<div class="card p act"><div class="eh"><div style="min-width:0"><b class="big">${esc(x)}</b><p class="sub">${grp(x)}${l?` · Last ${f1(l.w)} × ${l.r}, ${when(l.t).toLowerCase()}`:' · No sets yet'}</p></div><button class="tag" data-a="lib">Change</button></div>${tgt?`<p class="sel tg">${esc(tgt)}</p>`:''}<p class="sub" id="why" style="margin:4px 0 0">${esc(why||'')}</p>
- <div class="two">${stp('w','Weight ('+S.unit+')',S.w,'decimal')}${stp('r','Reps',S.r,'numeric')}</div>
+ const act=`<div class="card p act"><div class="eh"><div style="min-width:0"><b class="big">${esc(x)}</b><p class="sub">${grp(x)}${l?` · Last ${f1(l.w)} × ${l.r}, ${when(l.t).toLowerCase()}`:' · No sets yet'}</p></div><button class="tag" data-a="lib">Change</button></div>${tgt?`<p class="sel tg">${esc(tgt)}</p>`:''}${l&&(+S.w!=l.w||+S.r!=l.r)?`<div class="tg2"><button class="tag" data-a="repeat">Use last set · ${f1(l.w)} × ${l.r}</button></div>`:''}<p class="sub" id="why" style="margin:4px 0 0">${esc(why||'')}</p>
+ <div class="two">${stp('w','Weight ('+S.unit+')',f1(S.w),'decimal')}${stp('r','Reps',S.r,'numeric')}</div>
  <div class="qd">${qd.map(v=>`<button data-a="wd" data-v="${v}">${v>0?'+':'−'}${Math.abs(v)}</button>`).join('')}</div>
  <button class="btn" data-a="log">Log set ${n+1}${tot?' of '+Math.max(tot,n+1):''}</button><div style="height:8px"></div><button class="btn g sm" id="sg" data-a="suggest">${SPK}&nbsp;Suggest next set</button></div>`;
  const rn=Math.max(tot,n),sets=rn?`<h2>Sets<span class="sub">${n}${tot?' of '+tot:''} done</span></h2><div class="card">${Array.from({length:rn},(_,i)=>{const s=mine[i];return s?`<div class="row"><span class="ck on" style="flex:none">${CHK}</span><div><b>Set ${i+1} · ${f1(s.w)} × ${s.r}</b><span class="sub">${new Date(s.t).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}</span></div><button class="x" data-a="del" data-v="${s.id}" aria-label="Delete set">×</button></div>`:`<div class="row pend"><span class="ck" style="flex:none"></span><div><b>Set ${i+1}</b><span class="sub">Target ${it&&it.w?f1(it.w)+' × ':''}${it?it.tr:''}</span></div></div>`}).join('')}</div>`:'';
  const ses=items.filter(i=>i.pl||doneSets(i.ex)>0),done=ses.filter(i=>i.sets&&doneSets(i.ex)>=i.sets).length;
- const sess=ses.length?`<h2>${esc(p.items.length?p.title:'Session')}<span class="sub">${p.items.length?done+'/'+p.items.length+' done · ':''}${tl.length} set${tl.length==1?'':'s'}${tl.length?' · '+fv(vol)+' '+S.unit:''}</span></h2><div class="card">${ses.map(i=>{const ds=doneSets(i.ex),ok=i.sets&&ds>=i.sets,ls=tl.filter(s=>s.ex==i.ex).map(s=>f1(s.w)+'×'+s.r).join('  ·  ');return`<div class="row tap" data-a="pickx" data-v="${esc(i.ex)}"><span class="ck ${ok?'on':ds?'part':''}" style="--p:${i.sets?Math.min(1,ds/i.sets)*360:360}deg;flex:none">${ok?CHK:''}</span><div><b class="${i.ex==x?'sel':''}">${esc(i.ex)}</b><span class="sub">${ls||(i.sets?i.sets+' × '+esc(i.reps)+(i.w?' · '+f1(i.w)+' '+S.unit:''):'')}</span></div><span class="sub" style="flex:none">${ds}${i.sets?'/'+i.sets:''}</span></div>`}).join('')}</div>`:'';
- return`<div class="hd"><h1>Track</h1><button class="tag sg" data-a="chat" style="margin-top:8px">${SPK}Ask coach</button></div>${rail}${act}<h2>Rest timer</h2>${restCard()}${sets}${sess}${tl.length?'<button class="btn g" data-a="finish">Finish session and review</button>':''}`}
+ const sess=ses.length?`<h2>${esc(p.items.length?p.title:'Session')}<span class="sub">${p.items.length?done+'/'+p.items.length+' done · ':''}${tl.length} set${tl.length==1?'':'s'}${tl.length?' · '+fv(vol)+' '+S.unit+' · '+Math.max(1,Math.round((Date.now()-tl[0].t)/6e4))+' min':''}</span></h2><div class="card">${ses.map(i=>{const ds=doneSets(i.ex),ok=i.sets&&ds>=i.sets,ls=tl.filter(s=>s.ex==i.ex).map(s=>f1(s.w)+'×'+s.r).join('  ·  ');return`<div class="row tap" data-a="pickx" data-v="${esc(i.ex)}"><span class="ck ${ok?'on':ds?'part':''}" style="--p:${i.sets?Math.min(1,ds/i.sets)*360:360}deg;flex:none">${ok?CHK:''}</span><div><b class="${i.ex==x?'sel':''}">${esc(i.ex)}</b><span class="sub">${ls||(i.sets?i.sets+' × '+esc(i.reps)+(i.w?' · '+f1(i.w)+' '+S.unit:''):'')}</span></div><span class="sub" style="flex:none">${ds}${i.sets?'/'+i.sets:''}</span></div>`}).join('')}</div>`:'';
+ return`<div class="hd"><h1>Track</h1><button class="tag sg" data-a="chat" style="margin-top:8px">${SPK}Coach</button></div>${rail}${act}<div class="card p cbk">${cbar('Ask coach about '+x,['Is this weight right?','How do I progress this lift?'])}</div><h2>Rest timer</h2>${restCard()}${sets}${sess}${tl.length?'<button class="btn g" data-a="finish">Finish session and review</button>':''}`}
 
 /* ---------- charts ---------- */
 const smooth=P=>{let d='M'+P[0][0]+','+P[0][1];for(let i=1;i<P.length;i++){const m=(P[i-1][0]+P[i][0])/2;d+='C'+m+','+P[i-1][1]+' '+m+','+P[i][1]+' '+P[i][0]+','+P[i][1]}return d};
@@ -142,15 +168,34 @@ function lineChart(s,f){const W=340,H=200,L=8,R=10,T0=14,B=22;if(!s.length)retur
   fx=`<path d="M${an[0]},${an[1]}${up.map(q=>'L'+q).join('')}${lo.map(q=>'L'+q).join('')}Z" fill="var(--ac)" opacity=".15"/><path d="${smooth(fp)}" fill="none" stroke="var(--ac)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 7"/><circle cx="${fp[fp.length-1][0]}" cy="${fp[fp.length-1][1]}" r="4" fill="var(--bg)" stroke="var(--ac)" stroke-width="2"/>`;
   pts=pts.concat(fut.map((p,i)=>[fp[i+1][0],fp[i+1][1],p[0],p[1],1]))}
  return`<svg id="ch" viewBox="0 0 ${W} ${H}" data-p='${JSON.stringify(pts)}'><defs><linearGradient id="ar" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--ac)" stop-opacity=".4"/><stop offset="1" stop-color="var(--ac)" stop-opacity="0"/></linearGradient></defs>${gl}<path d="${d}L${hp[hp.length-1][0]},${H-B}L${hp[0][0]},${H-B}Z" fill="url(#ar)"/>${fx}<path d="${d}" fill="none" stroke="var(--ac)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><text x="${L}" y="${H-6}">${fd(x0)}</text><text x="${W-R}" y="${H-6}" text-anchor="end">${fd(x1)}</text><circle id="dt" cx="${hp[hp.length-1][0]}" cy="${hp[hp.length-1][1]}" r="5" fill="var(--tx)" stroke="var(--ac)" stroke-width="3"/></svg>`}
-function charts(){const opts=recent(9999);if(S.body.filter(b=>b.w).length>=2)opts.push('__bw');if(!opts.length)return'<h1>Charts</h1>'+emptyCard();if(!opts.includes(S.cx))S.cx=opts[0];
- const bw=S.cx=='__bw',all_=bw?S.body.filter(b=>b.w).map(b=>[sod(b.t),f1(dispW(b.w))]):ser(S.cx,S.m);let s=all_.filter(p=>S.rg>=999||p[0]>=sod(Date.now())-S.rg*DAY);if(!s.length&&all_.length)s=all_.slice(-1);
- const canFc=!bw&&sess(S.cx).length>=2,f=S.fc&&canFc?fcGet():null,cur=s.length?s[s.length-1][1]:0,ch=s.length?cur-s[0][1]:0,best=s.length?Math.max(...s.map(p=>p[1])):0,W=weeks(8).reverse(),wm=Math.max(1,...W.map(w=>w.volume));
- return`<h1>Charts</h1><select id="cs" aria-label="Exercise">${opts.map(x=>`<option value="${esc(x)}" ${x==S.cx?'selected':''}>${x=='__bw'?'Body weight':esc(x)}</option>`).join('')}</select><div style="height:12px"></div>
-<div class="card p"><div style="display:grid;gap:8px">${bw?'':seg('m',[['e1','Est. 1RM'],['w','Top weight']],S.m)}${seg('rg',[[30,'1M'],[90,'3M'],[180,'6M'],[999,'All']],S.rg)}</div>
-<div class="rd"><b id="rd">${s.length?f1(cur)+' '+S.unit:'—'}</b><span class="sub" id="rs2">${s.length?when(s[s.length-1][0]):''}</span></div>${lineChart(s,f)}
-<div class="stat"><div><b>${f1(cur)}</b><span>Current</span></div><div><b class="${ch>0?'sel':''}">${ch>0?'+':''}${f1(ch)}</b><span>Change</span></div><div><b>${f1(best)}</b><span>Best</span></div></div>
-${canFc?`<div class="fc"><div class="top"><button class="chip ${S.fc?'on':''}" data-a="fc">${SPK} Forecast</button>${S.fc?seg('fw',[[4,'4w'],[8,'8w'],[12,'12w']],S.fw):''}</div>${S.fc&&f?`<p style="font-size:14px;line-height:1.4">${esc(f.summary)}</p>${f.milestones.length?`<div class="ms">${f.milestones.map(m=>`<span>${esc(m.label)} · week ${m.week}</span>`).join('')}</div>`:''}<p class="sub">${f.src=='ai'?'AI forecast from your history, split and body data':T.busy.fc?'Asking the coach…':S.tok?'Trend estimate':'Trend estimate · sign in for the AI forecast'}</p>${T.err.fc&&f.src!='ai'?`<p class="note red">${esc(T.err.fc)}</p>`:''}`:'<p class="sub">See where this lift is heading, based on your history, split and body data.</p>'}</div>`:''}</div>
+function lifts_(){return recent(9999)}
+function charts(){const lifts=lifts_(),opts=[...lifts];if(S.body.filter(b=>b.w).length>=2)opts.push('__bw');if(!opts.length)return'<h1>Charts</h1>'+emptyCard();
+ const fv_=S.ct=='f'&&lifts.length>0,pool=fv_?lifts:opts;if(!pool.includes(S.cx))S.cx=pool[0];
+ const head=`<div class="hd"><h1>Charts</h1></div>${lifts.length?seg('ct',[['p','Progress'],['f',SPK+' Forecast']],fv_?'f':'p').replace('class="seg"','class="seg big"'):''}<select id="cs" aria-label="Exercise" style="margin:12px 0">${pool.map(x=>`<option value="${esc(x)}" ${x==S.cx?'selected':''}>${x=='__bw'?'Body weight':esc(x)}</option>`).join('')}</select>`;
+ return head+(fv_?forecastView():progressView())}
+function progressView(){const bw=S.cx=='__bw',all_=bw?S.body.filter(b=>b.w).map(b=>[sod(b.t),f1(dispW(b.w))]):ser(S.cx,S.m);let s=all_.filter(p=>S.rg>=999||p[0]>=sod(Date.now())-S.rg*DAY);if(!s.length&&all_.length)s=all_.slice(-1);
+ const cur=s.length?s[s.length-1][1]:0,ch=s.length?cur-s[0][1]:0,best=s.length?Math.max(...s.map(p=>p[1])):0,W=weeks(8).reverse(),wm=Math.max(1,...W.map(w=>w.volume));
+ return`<div class="card p"><div style="display:grid;gap:8px">${bw?'':seg('m',[['e1','Est. 1RM'],['w','Top weight']],S.m)}${seg('rg',[[30,'1M'],[90,'3M'],[180,'6M'],[999,'All']],S.rg)}</div>
+<div class="rd"><b id="rd">${s.length?f1(cur)+' '+S.unit:'—'}</b><span class="sub" id="rs2">${s.length?when(s[s.length-1][0]):''}</span></div>${lineChart(s,null)}
+<div class="stat"><div><b>${f1(cur)}</b><span>Current</span></div><div><b class="${ch>0?'sel':''}">${ch>0?'+':''}${f1(ch)}</b><span>Change</span></div><div><b>${f1(best)}</b><span>Best</span></div></div></div>
+${bw?'':`<div class="card p fcta" data-a="ct" data-v="f"><div><b>${SPK} See your forecast</b><p class="sub">Where this lift is heading, built from your history, split and body data.</p></div><span class="sel">›</span></div>`}
 <h2>Weekly volume · all lifts</h2><div class="card p"><div class="sub">${S.unit} lifted per week</div><div class="vb">${W.map((w,i)=>`<div><i style="height:${w.volume/wm*80}%"></i>${i==7?'Now':(7-i)+'w'}</div>`).join('')}</div></div>`}
+function forecastView(){const x=S.cx,sx=ser(x,S.m),f=fcGet(),W=S.fw;
+ if(!sx.length||!f)return`<div class="card p"><b>No data for this lift yet</b><p class="sub">Log a set and the forecast appears here.</p></div>`;
+ const s=sx.filter(p=>p[0]>=sod(Date.now())-120*DAY),cur=sx[sx.length-1][1],end=f.pts[W-1],lo=f.low[W-1],hi=f.high[W-1],pct=(end/cur-1)*100,pl=planFor(x),fr=f1(sess(x).filter(c=>c.d>=sod(Date.now())-28*DAY).length/4),n=sess(x).length,busy=T.busy.fc;
+ const ex=P().exp,gl=P().goal,facts=[pl?pl.perWeek+'× a week in your split':S.split?'Not in your split':'No split added',pl?pl.sets+' sets × '+pl.reps:'',n+' session'+(n==1?'':'s')+' logged',fr?fr+'× a week lately':'',{new:'Under 1 year',mid:'1 to 3 years',adv:'Over 3 years'}[ex]||'',{str:'Get stronger',mus:'Build muscle',fat:'Lose fat',gen:'General fitness'}[gl]||'',P().bf?P().bf+'% body fat':''].filter(Boolean);
+ const wk=f.pts.map((v,i)=>[i+1,v,f.low[i],f.high[i]]).filter(r=>r[0]%(W>8?2:1)==0||r[0]==W);
+ const rows=lifts_().filter(l=>l!=x&&sess(l).length>=1).slice(0,5).map(l=>{const g=localForecast(l,S.m,W);if(!g)return'';const c=ser(l,S.m).slice(-1)[0][1],e=g.pts[W-1];return`<div class="row tap" data-a="fx" data-v="${esc(l)}"><div><b>${esc(l)}</b><span class="sub">${f1(c)} → ${f1(e)} ${S.unit}</span></div><span class="dl up">+${f1((e/c-1)*100)}%</span></div>`}).join('');
+ return`<div class="card p"><div style="display:grid;gap:8px">${seg('m',[['e1','Est. 1RM'],['w','Top weight']],S.m)}${seg('fw',[[4,'4 weeks'],[8,'8 weeks'],[12,'12 weeks']],S.fw)}</div>
+<div class="rd"><b id="rd">${f1(end)} ${S.unit}</b><span class="sub" id="rs2">in ${W} weeks · ${pct>=0?'+':''}${f1(pct)}%</span></div>${lineChart(s,f)}
+<div class="stat"><div><b>${f1(cur)}</b><span>Now</span></div><div><b class="sel">${f1(end)}</b><span>Week ${W}</span></div><div><b>${f1(lo)}–${f1(hi)}</b><span>Likely range</span></div></div></div>
+<h2>Coach's take${S.tok?`<button data-a="fcr" ${busy?'disabled':''}>${busy?'Thinking…':'Refresh'}</button>`:''}</h2><div class="card p">${busy&&f.src!='ai'?'<div class="shim" style="width:80%;margin-bottom:8px"></div><div class="shim" style="width:60%"></div>':`<p style="font-size:15px;line-height:1.45">${esc(f.summary)}</p>`}${n<3?'<p class="note" style="margin:8px 0 0">Only '+n+' session'+(n==1?'':'s')+' so far, so this leans on typical progress. It sharpens as you log more.</p>':''}
+<div class="sub" style="margin-top:10px">${f.src=='ai'?'AI forecast · split and body data included':S.tok?'Trend estimate · AI forecast loads automatically':'Trend estimate · sign in for the AI forecast'}</div>${T.err.fc&&f.src!='ai'?`<p class="note red" style="margin:6px 0 0">${esc(T.err.fc)}</p>`:''}</div>
+<h2>Built from</h2><div class="card p"><div class="ms">${facts.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>
+<h2>Week by week</h2><div class="prs">${wk.map(r=>`<div class="pr nopt"><small>Week ${r[0]}</small><strong>${f1(r[1])}</strong><span class="sub">${f1(r[2])} to ${f1(r[3])}</span></div>`).join('')}</div>
+${f.milestones.length?`<h2>Milestones</h2><div class="card">${f.milestones.map(m=>`<div class="row"><span class="ck on" style="flex:none">${CHK}</span><div><b>${esc(m.label)}</b><span class="sub">Around week ${m.week}</span></div></div>`).join('')}</div>`:''}
+${rows?`<h2>Other lifts · ${W} weeks</h2><div class="card">${rows}</div><p class="note">Quick estimates from each lift's own trend and your split.</p>`:''}
+<h2>Ask the coach</h2><div class="card p">${cbar('Ask about this forecast',['Why this number?','How do I beat it?','What would speed it up?'])}</div>`}
 function bindChart(){const c=$('#ch');if(!c)return;const Pn=JSON.parse(c.dataset.p),dt=$('#dt');
  c.onpointermove=c.onpointerdown=e=>{const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*340;let b=Pn[0];Pn.forEach(p=>{if(Math.abs(p[0]-x)<Math.abs(b[0]-x))b=p});dt.setAttribute('cx',b[0]);dt.setAttribute('cy',b[1]);$('#rd').textContent=f1(b[3])+' '+S.unit;$('#rs2').textContent=b[4]?'in '+Math.round((b[2]-sod(Date.now()))/(7*DAY))+' wk · forecast':when(b[2])}}
 
@@ -167,7 +212,7 @@ function settings(){const sp=S.split,tt=!!S.tok,bs=bodySum();
 ${sw('rauto',S.rt.auto,'Auto-start rest timer','After you log a set')}${sw('rsnd',S.rt.snd,'Timer sound','Chime and vibration when rest ends')}
 <div class="row"><span>Default rest</span><div class="mini"><button data-a="rd-" aria-label="Shorter">−</button><span><b id="rdv">${mmss(S.rt.def)}</b></span><button data-a="rd+" aria-label="Longer">+</button></div></div></div>
 <h2>Appearance</h2><div class="card"><div class="row"><span>Units</span>${seg('unit',[['lb','lb'],['kg','kg']],S.unit)}</div><div class="row"><span>Theme</span>${seg('theme',[['auto','Auto'],['light','Light'],['dark','Dark']],S.theme)}</div></div>
-<p class="note">Units change labels and your body data. Logged lift weights are not converted.</p>
+<p class="note">Switching units converts every logged weight, so your history stays accurate.</p>
 <h2>AI coach</h2><div class="card"><div class="row"><div><b>Connection</b><span class="sub" id="aist" style="white-space:normal">${esc(T.aist||'Not tested')}</span></div></div><div class="row tap" data-a="testai"><span class="sel">Test connection</span></div></div>
 <h2>Account</h2>${acct}
 <h2>Data</h2><div class="card"><div class="row tap" data-a="sample"><span>Load sample data</span></div><div class="row tap" data-a="export"><span>Export backup</span></div><div class="row tap" data-a="import"><span>Import backup</span></div>${sp?'<div class="row tap" data-a="splitclear"><span class="red">Remove split</span></div>':''}<div class="row tap" data-a="reset"><span class="red">Reset all data</span></div>${tt?'<div class="row tap" data-a="rmacct"><span class="red">Delete account</span></div>':''}</div><input type="file" id="imp" accept="application/json,.json" hidden><p class="foot">Ivory 3.0</p>`}
